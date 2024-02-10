@@ -1,5 +1,5 @@
 # awsExportLog
-GoLang progame to export the log from the AWS.
+GoLang program to export the log from the AWS.
 
 ## Pre-requisite
 1. AWS CLI must be installed
