@@ -20,7 +20,7 @@ GoLang program to export the log from the AWS.
 
 ## Example Usage
 ```
-awsExportLog -r=us-west-2 -g=/aws/containerinsights/my-log-group s=mytest.restapi -f=2024-01-13T14:25:00Z -d=1h > myLogfile.log
+awsExportLog -r=us-west-2 -g=/aws/containerinsights/my-log-group -s=mytest.restapi -f=2024-01-13T14:25:00Z -d=1h > myLogfile.log
 ```
 This will export the log content to the myLogfile.log
 
