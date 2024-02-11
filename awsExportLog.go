@@ -5,18 +5,20 @@ import (
 	"flag"
 	"fmt"
 	"os/exec"
+	"strings"
 	"time"
 )
 
 func readConfigFromCommandLine() ([]string, error) {
 
-	var region, logGroupName, logStreamName, from, duration string
+	var region, logGroupName, logStreamName, from, duration, profile string
 
 	flag.StringVar(&region, "r", "", "AWS region")
 	flag.StringVar(&logGroupName, "g", "", "AWS log group name")
 	flag.StringVar(&logStreamName, "s", "", "AWS log stream name")
 	flag.StringVar(&from, "f", "", "From time in RFC3339 format. e.g.: 2024-02-13T14:25:60Z")
 	flag.StringVar(&duration, "d", "1h", "Duration of the log to be taken from the From time. e.g. 1m1s = 1 minute 1 second")
+	flag.StringVar(&profile, "p", "", "Profile (Optional)")
 	flag.Parse()
 
 	if (region == "") || (logGroupName == "") || (logStreamName == "") || (from == "") || (duration == "") {
@@ -45,6 +47,10 @@ func readConfigFromCommandLine() ([]string, error) {
 		"--end-time", fmt.Sprint(timeTo.UnixMilli()),
 		"--start-from-head")
 
+	if profile != "" {
+		cmdParams = append(cmdParams, "--profile", profile)
+	}
+
 	return cmdParams, nil
 }
 
@@ -55,11 +61,11 @@ func retrieveAwsLog(cmdParams []string) {
 	*/
 	out, err := exec.Command("aws", cmdParams...).Output()
 	if err != nil {
-		fmt.Println("ERROR occurred when running the aws command")
-		fmt.Println(cmdParams)
-		fmt.Println("Check https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-returncodes.html for the following exit status code")
-		fmt.Println(err)
-		panic(err)
+		fmt.Println("ERROR when running following aws command:")
+		fmt.Println("aws", strings.Join(cmdParams, " "))
+		fmt.Println("Result:", err)
+		fmt.Println("Check https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-returncodes.html for the exit status code")
+		return
 	}
 
 	//-- for debug the output
