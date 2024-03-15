@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -61,10 +62,17 @@ func retrieveAwsLog(cmdParams []string) {
 	*/
 	out, err := exec.Command("aws", cmdParams...).Output()
 	if err != nil {
-		fmt.Println("ERROR when running following aws command:")
-		fmt.Println("aws", strings.Join(cmdParams, " "))
-		fmt.Println("Result:", err)
-		fmt.Println("Check https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-returncodes.html for the exit status code")
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			fmt.Fprintf(os.Stderr, "Error when running following aws command:\n")
+			fmt.Fprintf(os.Stderr, "aws %s\n\n", strings.Join(cmdParams, " "))
+			if exitErr.Stderr != nil {
+				fmt.Fprintf(os.Stderr, "Error Output:\n%s\n", string(exitErr.Stderr))
+			}
+			fmt.Fprintf(os.Stderr, "Result: %s\n", err)
+			fmt.Fprintf(os.Stderr, "Check https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-returncodes.html for the exit status code\n")
+			return
+		}
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		return
 	}
 
@@ -80,7 +88,7 @@ func retrieveAwsLog(cmdParams []string) {
 	// Extract log messages
 	events := res["events"].([]interface{})
 	if len(events) == 0 {
-		fmt.Println("----:: NO_MORE_LOG_FOR_THE_TIME_RANGE ::----->")
+		// fmt.Println("----:: NO_MORE_LOG_FOR_THE_TIME_RANGE ::----->")
 		return
 	}
 
@@ -112,7 +120,7 @@ func retrieveAwsLog(cmdParams []string) {
 func main() {
 	cmdParams, err := readConfigFromCommandLine()
 	if err != nil {
-		fmt.Println(err)
+		fmt.Fprintf(os.Stderr, "ERROR: %s\n", err)
 		return
 	}
 	retrieveAwsLog(cmdParams)

@@ -1,3 +1,9 @@
 *.log
 *.exe
 *.bat
+logs
+scripts
+*.zip
+*.bak
+*.orig
+.vscode
