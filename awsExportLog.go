@@ -1,127 +1,125 @@
 package main
 
 import (
-	"encoding/json"
+	"context"
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
-	"strings"
 	"time"
+
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 )
 
-func readConfigFromCommandLine() ([]string, error) {
+const (
+	VERSION   = "1.1"
+	ERROR_MSG = "ERROR: %s\n"
+)
 
-	var region, logGroupName, logStreamName, from, duration, profile string
+var (
+	profile       string
+	region        string
+	logEventInput *cloudwatchlogs.GetLogEventsInput
+)
+
+func main() {
+	readConfigFromCommandLine()
+	retrieveAwsLog()
+}
+
+func readConfigFromCommandLine() {
+
+	var logGroupName, logStreamName, from, duration string
+	var help bool
 
 	flag.StringVar(&region, "r", "", "AWS region")
 	flag.StringVar(&logGroupName, "g", "", "AWS log group name")
 	flag.StringVar(&logStreamName, "s", "", "AWS log stream name")
 	flag.StringVar(&from, "f", "", "From time in RFC3339 format. e.g.: 2024-02-13T14:25:60Z")
-	flag.StringVar(&duration, "d", "1h", "Duration of the log to be taken from the From time. e.g. 1m1s = 1 minute 1 second")
-	flag.StringVar(&profile, "p", "", "Profile (Optional)")
+	flag.StringVar(&duration, "d", "1h", "(Optional) Duration of the log to be taken from the From time. \n"+
+		"Valid time units are \"ns\", \"us\" (or \"µs\"), \"ms\", \"s\", \"m\", \"h\"")
+	flag.StringVar(&profile, "p", "", "(Optional) Profile")
+	flag.BoolVar(&help, "h", false, "Help")
 	flag.Parse()
 
+	if help {
+		printHelp()
+		os.Exit(0)
+	}
+
 	if (region == "") || (logGroupName == "") || (logStreamName == "") || (from == "") || (duration == "") {
-		flag.PrintDefaults()
-		return nil, fmt.Errorf("missing parameters")
+		printHelp()
+		fmt.Fprintf(os.Stderr, ERROR_MSG, fmt.Errorf("missing parameters"))
+		os.Exit(1)
 	}
 
 	timeFrom, err := time.Parse(time.RFC3339, from)
 	if err != nil {
-		return nil, fmt.Errorf("error on parsing the From time: %s", err)
+		fmt.Fprintf(os.Stderr, ERROR_MSG, fmt.Errorf("error on parsing the From time: %s", err))
+		os.Exit(2)
 	}
 
 	d, err := time.ParseDuration(duration)
 	if err != nil {
-		return nil, fmt.Errorf("error on parsing the Duration: %s", err)
+		fmt.Fprintf(os.Stderr, ERROR_MSG, fmt.Errorf("error on parsing the Duration: %s", err))
+		os.Exit(3)
 	}
 
 	timeTo := timeFrom.Add(d)
 
-	var cmdParams []string
-	cmdParams = append(cmdParams, "logs", "get-log-events",
-		"--region", region,
-		"--log-group-name", logGroupName,
-		"--log-stream-name", logStreamName,
-		"--start-time", fmt.Sprint(timeFrom.UnixMilli()),
-		"--end-time", fmt.Sprint(timeTo.UnixMilli()),
-		"--start-from-head")
+	startTime := timeFrom.UnixMilli()
+	endTime := timeTo.UnixMilli()
 
-	if profile != "" {
-		cmdParams = append(cmdParams, "--profile", profile)
+	startFromHeader := true
+
+	//get log events
+	logEventInput = &cloudwatchlogs.GetLogEventsInput{
+		LogGroupName:  &logGroupName,
+		LogStreamName: &logStreamName,
+		StartTime:     &startTime,
+		EndTime:       &endTime,
+		StartFromHead: &startFromHeader, // Start from the beginning of the log stream
 	}
-
-	return cmdParams, nil
 }
 
-func retrieveAwsLog(cmdParams []string) {
-	/*
-		AWS Logs documentation:
-		https://awscli.amazonaws.com/v2/documentation/api/latest/reference/logs/get-log-events.html
-	*/
-	out, err := exec.Command("aws", cmdParams...).Output()
+func retrieveAwsLog() {
+	cfg, err := config.LoadDefaultConfig(context.TODO(),
+		config.WithDefaultRegion(region),
+		config.WithSharedConfigProfile(profile),
+	)
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			fmt.Fprintf(os.Stderr, "Error when running following aws command:\n")
-			fmt.Fprintf(os.Stderr, "aws %s\n\n", strings.Join(cmdParams, " "))
-			if exitErr.Stderr != nil {
-				fmt.Fprintf(os.Stderr, "Error Output:\n%s\n", string(exitErr.Stderr))
-			}
-			fmt.Fprintf(os.Stderr, "Result: %s\n", err)
-			fmt.Fprintf(os.Stderr, "Check https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-returncodes.html for the exit status code\n")
+		fmt.Fprintf(os.Stderr, ERROR_MSG, err)
+		fmt.Fprintf(os.Stderr, "Error when setting up credential\n")
+	}
+	//create cloudwatchlogs client
+	client := cloudwatchlogs.NewFromConfig(cfg)
+
+	for {
+		resp, err := client.GetLogEvents(context.TODO(), logEventInput)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, ERROR_MSG, err)
 			return
 		}
-		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-		return
-	}
 
-	//-- for debug the output
-	// f, _ := os.OpenFile("output.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	// f.Write(out)
-	// f.Close()
+		for _, event := range resp.Events {
+			fmt.Println(*event.Message)
+		}
 
-	// Parse JSON response
-	var res map[string]interface{}
-	json.Unmarshal(out, &res)
-
-	// Extract log messages
-	events := res["events"].([]interface{})
-	if len(events) == 0 {
-		// fmt.Println("----:: NO_MORE_LOG_FOR_THE_TIME_RANGE ::----->")
-		return
-	}
-
-	for _, event := range events {
-		m := event.(map[string]interface{})["message"]
-		fmt.Println(m.(string))
-	}
-
-	// Get next token
-	nextToken := res["nextForwardToken"].(string)
-	// fmt.Println("nextToken:", nextToken)
-	idx := -1
-	for i, param := range cmdParams {
-		if param == "--next-token" {
-			idx = i
+		if resp.NextForwardToken == nil ||
+			(logEventInput.NextToken != nil && *logEventInput.NextToken == *resp.NextForwardToken) {
+			// We've reached the end of the stream
 			break
 		}
-	}
-	if idx == -1 {
-		cmdParams = append(cmdParams, "--next-token", nextToken)
-	} else {
-		cmdParams = append(cmdParams[:idx+1], cmdParams[idx+2:]...)
-		cmdParams = append(cmdParams, nextToken)
-	}
 
-	retrieveAwsLog(cmdParams)
+		logEventInput.NextToken = resp.NextForwardToken
+	}
 }
 
-func main() {
-	cmdParams, err := readConfigFromCommandLine()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: %s\n", err)
-		return
-	}
-	retrieveAwsLog(cmdParams)
+func printHelp() {
+	fmt.Println("Version:", VERSION)
+	fmt.Println("Usage:", os.Args[0]+" -r REGION -g GROUP -s STREAM -f FROM_TIME [options]")
+	fmt.Println("Rretrieve the logs from the AWS CloudWatch Logs")
+	fmt.Println()
+	fmt.Println("Parameters")
+	flag.PrintDefaults()
 }
