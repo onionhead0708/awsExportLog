@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	VERSION   = "1.1"
+	VERSION   = "1.2"
 	ERROR_MSG = "ERROR: %s\n"
 )
 
