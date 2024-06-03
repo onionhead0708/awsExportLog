@@ -95,7 +95,9 @@ func retrieveAwsLog() {
 	client := cloudwatchlogs.NewFromConfig(cfg)
 
 	for {
-		resp, err := client.GetLogEvents(context.TODO(), logEventInput)
+		resp, err := client.GetLogEvents(context.TODO(), logEventInput, func(o *cloudwatchlogs.Options) {
+			o.Region = region
+		})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, ERROR_MSG, err)
 			return
