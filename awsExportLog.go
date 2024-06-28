@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	VERSION   = "1.2"
+	VERSION   = "1.3"
 	ERROR_MSG = "ERROR: %s\n"
 )
 
@@ -20,6 +20,7 @@ var (
 	profile       string
 	region        string
 	logEventInput *cloudwatchlogs.GetLogEventsInput
+	logTimestamp  bool
 )
 
 func main() {
@@ -35,10 +36,11 @@ func readConfigFromCommandLine() {
 	flag.StringVar(&region, "r", "", "AWS region")
 	flag.StringVar(&logGroupName, "g", "", "AWS log group name")
 	flag.StringVar(&logStreamName, "s", "", "AWS log stream name")
-	flag.StringVar(&from, "f", "", "From time in RFC3339 format. e.g.: 2024-02-13T14:25:60Z")
+	flag.StringVar(&from, "f", "", "(Optional) From time in RFC3339 format. e.g.: 2024-02-13T14:25:60Z. By default is current time.")
 	flag.StringVar(&duration, "d", "1h", "(Optional) Duration of the log to be taken from the From time. \n"+
 		"Valid time units are \"ns\", \"us\" (or \"µs\"), \"ms\", \"s\", \"m\", \"h\"")
 	flag.StringVar(&profile, "p", "", "(Optional) Profile")
+	flag.BoolVar(&logTimestamp, "t", false, "(Optional) Whether to write the log entry received timestamp (UTC) to the log")
 	flag.BoolVar(&help, "h", false, "Help")
 	flag.Parse()
 
@@ -47,22 +49,32 @@ func readConfigFromCommandLine() {
 		os.Exit(0)
 	}
 
-	if (region == "") || (logGroupName == "") || (logStreamName == "") || (from == "") || (duration == "") {
+	if (region == "") || (logGroupName == "") || (logStreamName == "") || (duration == "") {
+		fmt.Fprintln(os.Stderr, "Region: ", region)
+		fmt.Fprintln(os.Stderr, "Group: ", logGroupName)
+		fmt.Fprintln(os.Stderr, "Stream: ", logStreamName)
+		fmt.Fprintln(os.Stderr, "Duration: ", duration)
 		printHelp()
 		fmt.Fprintf(os.Stderr, ERROR_MSG, fmt.Errorf("missing parameters"))
 		os.Exit(1)
-	}
-
-	timeFrom, err := time.Parse(time.RFC3339, from)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, ERROR_MSG, fmt.Errorf("error on parsing the From time: %s", err))
-		os.Exit(2)
 	}
 
 	d, err := time.ParseDuration(duration)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, ERROR_MSG, fmt.Errorf("error on parsing the Duration: %s", err))
 		os.Exit(3)
+	}
+
+	var timeFrom time.Time
+	if from != "" {
+		timeFrom1, err := time.Parse(time.RFC3339, from)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, ERROR_MSG, fmt.Errorf("error on parsing the From time: %s", err))
+			os.Exit(2)
+		}
+		timeFrom = timeFrom1
+	} else {
+		timeFrom = time.Now().Add(-d)
 	}
 
 	timeTo := timeFrom.Add(d)
@@ -103,7 +115,12 @@ func retrieveAwsLog() {
 			return
 		}
 
+		timestampeLayout := "2006-01-02 15:04:05.000"
 		for _, event := range resp.Events {
+			if logTimestamp {
+				timestamp := time.UnixMilli(int64(*event.Timestamp)).UTC()
+				fmt.Print(timestamp.Format(timestampeLayout), " ")
+			}
 			fmt.Println(*event.Message)
 		}
 

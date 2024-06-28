@@ -3,11 +3,16 @@ Rretrieve the logs from the AWS CloudWatch Logs
 
 ## Parameters
 ```
+Version: 1.3
+Usage: awsExportLog.exe -r REGION -g GROUP -s STREAM -f FROM_TIME [options]
+Rretrieve the logs from the AWS CloudWatch Logs
+
+Parameters
   -d string
         (Optional) Duration of the log to be taken from the From time.
         Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h" (default "1h")
   -f string
-        From time in RFC3339 format. e.g.: 2024-02-13T14:25:60Z
+        (Optional) From time in RFC3339 format. e.g.: 2024-02-13T14:25:60Z. By default is current time.
   -g string
         AWS log group name
   -h    Help
@@ -17,6 +22,7 @@ Rretrieve the logs from the AWS CloudWatch Logs
         AWS region
   -s string
         AWS log stream name
+  -t    (Optional) Whether to write the log entry received timestamp (UTC) to the log
 ```
 
 ## Example Usage
