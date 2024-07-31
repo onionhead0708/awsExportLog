@@ -64,15 +64,15 @@ func readConfigFromCommandLine() {
 	flag.StringVar(&logGroupName, "g", "", "AWS log group name")
 	flag.StringVar(&logStreamName, "s", "", "AWS log stream name \n"+
 		"Either Stream Name or Stream Prefix should has value")
-	flag.StringVar(&logStreamPreix, "pre", "", "(Optional) AWS Log stream prefix \n"+
+	flag.StringVar(&logStreamPreix, "sp", "", "(Optional) AWS Log stream prefix \n"+
 		"Either Stream Prefix or Stream Name should has value")
-	flag.StringVar(&from, "f", "", "(Optional) From time in RFC3339 format. e.g.: 2024-02-13T14:25:60Z. By default is current time.")
+	flag.StringVar(&from, "f", "", "(Optional) From time in RFC3339 format. e.g.: 2024-02-13T14:25:60Z. (default current time)")
 	flag.StringVar(&duration, "d", "1h", "(Optional) Duration of the log to be taken from the From time. \n"+
 		"Valid time units are \"ns\", \"us\" (or \"µs\"), \"ms\", \"s\", \"m\", \"h\"")
 	flag.StringVar(&profile, "p", "", "(Optional) Profile")
 	flag.BoolVar(&showLogTimestamp, "t", false, "(Optional) Whether to write the log entry received timestamp (UTC) to the log")
 	flag.BoolVar(&help, "h", false, "Help")
-	flag.StringVar(&outfolder, "o", "", "(Optional) Output folder for the log file")
+	flag.StringVar(&outfolder, "o", "", "(Optional) Output folder for the log file(s). Filename of the log file is $b.log")
 	flag.Parse()
 
 	if help {
@@ -81,11 +81,6 @@ func readConfigFromCommandLine() {
 	}
 
 	if (region == "") || (logGroupName == "") || (logStreamName == "" && logStreamPreix == "") || (duration == "") {
-		fmt.Fprintln(os.Stderr, "Region: ", region)
-		fmt.Fprintln(os.Stderr, "Group: ", logGroupName)
-		fmt.Fprintln(os.Stderr, "Stream: ", logStreamName)
-		fmt.Fprintln(os.Stderr, "StreamPrefix: ", logStreamPreix)
-		fmt.Fprintln(os.Stderr, "Duration: ", duration)
 		printHelp()
 		fmt.Fprintf(os.Stderr, ERROR_MSG, fmt.Errorf("missing parameters"))
 		os.Exit(1)
@@ -243,8 +238,14 @@ func writeLogEntry(file *os.File, logEntry string) {
 
 func printHelp() {
 	fmt.Println("Version:", VERSION)
-	fmt.Println("Usage:", os.Args[0]+" -r REGION -g GROUP -s STREAM -f FROM_TIME [options]")
-	fmt.Println("Rretrieve the logs from the AWS CloudWatch Logs")
+	fmt.Println("Usage:", os.Args[0]+" -r REGION -g GROUP -s STREAM [options]")
+	fmt.Println("Retrieve the log content from the AWS CloudWatch")
+	fmt.Println()
+	fmt.Println(os.Args[0]+" -r REGION -g GROUP -s STREAM -f FROM_TIME")
+	fmt.Println("Retrieve the log content starting from FROM_TIME for previous 1 hour")
+	fmt.Println()
+	fmt.Println(os.Args[0]+" -r REGION -g GROUP -sp STREAM_PREFIX -o OUTPUT_FOLDER")
+	fmt.Println("Search the matched stream and export the log content to the OUTPUT_FOLDER with filename is $streamName.log for previous 1 hour")
 	fmt.Println()
 	fmt.Println("Parameters")
 	flag.PrintDefaults()
