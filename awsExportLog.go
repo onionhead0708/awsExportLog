@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	VERSION   = "1.4"
+	VERSION   = "1.5"
 	ERROR_MSG = "ERROR: %s\n"
 )
 
@@ -26,6 +26,7 @@ var (
 	endTime          int64
 	showLogTimestamp bool
 	outfolder        string
+	filterPattern    string
 )
 
 func main() {
@@ -51,7 +52,11 @@ func main() {
 	}
 
 	for _, stream := range streams {
-		retrieveAwsLog(client, stream)
+		if filterPattern != "" {
+			retrieveAwsLogWithFilter(client, stream, filterPattern)
+		} else {
+			retrieveAwsLog(client, stream)
+		}
 	}
 }
 
@@ -73,6 +78,7 @@ func readConfigFromCommandLine() {
 	flag.BoolVar(&showLogTimestamp, "t", false, "(Optional) Whether to write the log entry received timestamp (UTC) to the log")
 	flag.BoolVar(&help, "h", false, "Help")
 	flag.StringVar(&outfolder, "o", "", "(Optional) Output folder for the log file(s). Filename of the log file is $b.log")
+	flag.StringVar(&filterPattern, "fp", "", "(Optional) Filter pattern to filter the log entries")
 	flag.Parse()
 
 	if help {
@@ -211,6 +217,52 @@ func retrieveAwsLog(client *cloudwatchlogs.Client, streamName string) {
 	}
 }
 
+func retrieveAwsLogWithFilter(client *cloudwatchlogs.Client, streamName string, filterPattern string) {
+
+	//if outFolder is not empty, then write the log to a file
+	file, shouldReturn := createFile(streamName)
+	if shouldReturn {
+		return
+	}
+	defer file.Close()
+
+	//get log events
+	logEventInput := &cloudwatchlogs.FilterLogEventsInput{
+		LogGroupName:   &logGroupName,
+		LogStreamNames: []string{streamName},
+		StartTime:      &startTime,
+		EndTime:        &endTime,
+		FilterPattern:  &filterPattern,
+	}
+
+	for {
+		resp, err := client.FilterLogEvents(context.TODO(), logEventInput, func(o *cloudwatchlogs.Options) {
+			o.Region = region
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, ERROR_MSG, err)
+			return
+		}
+
+		timestampeLayout := "2006-01-02 15:04:05.000"
+		for _, event := range resp.Events {
+			if showLogTimestamp {
+				timestamp := time.UnixMilli(int64(*event.Timestamp)).UTC()
+				writeLogEntry(file, timestamp.Format(timestampeLayout)+" ")
+			}
+			writeLogEntry(file, *event.Message+"\n")
+		}
+
+		if resp.NextToken == nil ||
+			(logEventInput.NextToken != nil && *logEventInput.NextToken == *resp.NextToken) {
+			// We've reached the end of the stream
+			break
+		}
+
+		logEventInput.NextToken = resp.NextToken
+	}
+}
+
 func createFile(streamName string) (*os.File, bool) {
 	var file *os.File
 	var err error
@@ -241,10 +293,10 @@ func printHelp() {
 	fmt.Println("Usage:", os.Args[0]+" -r REGION -g GROUP -s STREAM [options]")
 	fmt.Println("Retrieve the log content from the AWS CloudWatch")
 	fmt.Println()
-	fmt.Println(os.Args[0]+" -r REGION -g GROUP -s STREAM -f FROM_TIME")
+	fmt.Println(os.Args[0] + " -r REGION -g GROUP -s STREAM -f FROM_TIME")
 	fmt.Println("Retrieve the log content starting from FROM_TIME for previous 1 hour")
 	fmt.Println()
-	fmt.Println(os.Args[0]+" -r REGION -g GROUP -sp STREAM_PREFIX -o OUTPUT_FOLDER")
+	fmt.Println(os.Args[0] + " -r REGION -g GROUP -sp STREAM_PREFIX -o OUTPUT_FOLDER")
 	fmt.Println("Search the matched stream and export the log content to the OUTPUT_FOLDER with filename is $streamName.log for previous 1 hour")
 	fmt.Println()
 	fmt.Println("Parameters")

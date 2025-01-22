@@ -31,6 +31,10 @@ if not "%from_date%" equ "" (
   set base_param=-f=%from_date% %base_param%
 )
 
+if not "%filter_pattern%" equ "" (
+  set base_param=%base_param% -fp=%filter_pattern%
+)
+
 :: set the log folder
 set log_folder=%log_folder%\%log_folder_suffix%
 
@@ -59,6 +63,9 @@ for %%i in (%log_streams%) do (
 for %%i in (%log_stream_prefixes%) do (
     call :exportStreamPrefixLog %%i
 )
+
+rem pushd %log_folder%
+rem cmd /K
 
 echo done
 goto :eof
