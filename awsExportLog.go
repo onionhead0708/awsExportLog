@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	VERSION   = "1.5"
+	VERSION   = "1.6"
 	ERROR_MSG = "ERROR: %s\n"
 )
 
@@ -26,6 +26,7 @@ var (
 	endTime          int64
 	showLogTimestamp bool
 	outfolder        string
+	outfileSuffix    string
 	filterPattern    string
 )
 
@@ -113,6 +114,7 @@ func readConfigFromCommandLine() {
 	timeTo := timeFrom.Add(d)
 	startTime = timeFrom.UnixMilli()
 	endTime = timeTo.UnixMilli()
+	outfileSuffix = timeFrom.Format("2006-01-02-15-04")
 }
 
 func createAwsClient() (*cloudwatchlogs.Client, error) {
@@ -268,7 +270,7 @@ func createFile(streamName string) (*os.File, bool) {
 	var err error
 
 	if outfolder != "" {
-		fileName := outfolder + "/" + streamName + ".log"
+		fileName := outfolder + "/" + streamName + "-" + outfileSuffix + ".log"
 		fmt.Fprintln(os.Stderr, "creating file: "+fileName)
 		//create the file
 		file, err = os.Create(fileName)
